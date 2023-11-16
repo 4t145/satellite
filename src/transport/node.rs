@@ -157,8 +157,7 @@ impl Node {
 
     pub async fn send(&self, id: &str, from: &EndPointAddr, to: &EndPointAddr, payload: &[u8]) -> SendResult {
         if let Some(c) = self.connections.get(to) {
-            let result = c.send(id, to, payload);
-            result
+            c.send(id, to, payload)
         } else if let Some(node) = self.find_ep(to).await {
             self.send_cluster_message(
                 &node,
