@@ -1,27 +1,29 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use self::endpoint::EndPointAddr;
 
+pub mod cluster;
 pub mod endpoint;
-pub mod connection;
-pub mod node;
+#[derive(Debug, Serialize, Deserialize)]
 
-pub struct DataMessage {
+pub struct EpData {
     pub id: String,
+    pub from: EndPointAddr,
     pub to: EndPointAddr,
     pub payload: Vec<u8>,
 }
-
-pub enum Message {
+#[derive(Debug, Serialize, Deserialize)]
+pub enum EpMessage {
     Heartbeat,
-    Data(DataMessage),
+    Data(EpData),
 }
 
-#[derive(Debug, Serialize)]
-pub enum SendError {
-    Unreachable
+#[derive(Debug, Serialize, Deserialize)]
+pub enum ConnectionError {
+    Unreachable,
+    Overload,
+    ProtocolError,
 }
 
-
-pub type SendResult = Result<(), SendError>;
+pub type ConnectionResult<T = ()> = Result<T, ConnectionError>;
