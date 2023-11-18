@@ -19,30 +19,29 @@ pub struct BoxedEndpoint(pub Box<dyn EndPoint>);
 impl EndPoint for BoxedEndpoint {}
 
 #[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
-pub struct EndPointAddr {
+pub struct EpAddr {
     pub protocol: String,
     pub address: String,
 }
 
 #[derive(Debug)]
 pub struct EpConnection {
-    pub remote_addr: EndPointAddr,
+    pub remote_addr: EpAddr,
     pub data_tx: mpsc::Sender<EpData>,
     pub response_tx: mpsc::Sender<(String, ConnectionResult)>,
     // pub ep_message_rx: Mutex<mpsc::Receiver<EpMessage>>,
 }
 
 impl EpConnection {
-    pub fn remote_addr(&self) -> &EndPointAddr {
+    pub fn remote_addr(&self) -> &EpAddr {
         &self.remote_addr
     }
 
-    pub fn send(&self, message_id: &str, from: &EndPointAddr, payload: &[u8]) -> ConnectionResult {
+    pub fn send(&self, message_id: String, from: EpAddr, payload: Vec<u8>) -> ConnectionResult {
         let message = EpData {
-            id: message_id.to_string(),
-            to: self.remote_addr.clone(),
+            id: message_id,
+            peer: from,
             payload: payload.to_vec(),
-            from: from.clone(),
         };
         match self.data_tx.try_send(message) {
             Ok(_) => Ok(()),
@@ -53,8 +52,8 @@ impl EpConnection {
         }
     }
 
-    pub fn response(&self, message_id: &str, result: ConnectionResult) {
-        let _ = self.response_tx.try_send((message_id.to_string(), result));
+    pub fn response(&self, message_id: String, result: ConnectionResult) {
+        let _ = self.response_tx.try_send((message_id, result));
     }
 
     // pub fn poll_next_message(&self, cx: &mut Context<'_>) -> Poll<Option<EpMessage>> {
@@ -67,5 +66,5 @@ impl EpConnection {
 }
 
 pub trait EpConnectionBackend {
-    fn spawn(self, ep_message_tx: mpsc::Sender<(EndPointAddr, EpMessage)>) -> EpConnection;
+    fn spawn(self, ep_message_tx: mpsc::Sender<(EpAddr, EpMessage)>) -> EpConnection;
 }

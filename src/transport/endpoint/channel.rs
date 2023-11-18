@@ -1,6 +1,6 @@
 use std::task::{Context, Poll};
 
-use crate::transport::{endpoint::EndPointAddr, EpData, EpMessage, ConnectionError, ConnectionResult};
+use crate::transport::{endpoint::EpAddr, EpData, EpMessage, ConnectionError, ConnectionResult};
 use std::sync::Mutex;
 use tokio::sync::mpsc;
 

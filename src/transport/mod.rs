@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use self::endpoint::EndPointAddr;
+use self::endpoint::EpAddr;
 
 pub mod cluster;
 pub mod endpoint;
@@ -9,8 +9,7 @@ pub mod endpoint;
 
 pub struct EpData {
     pub id: String,
-    pub from: EndPointAddr,
-    pub to: EndPointAddr,
+    pub peer: EpAddr,
     pub payload: Vec<u8>,
 }
 #[derive(Debug, Serialize, Deserialize)]

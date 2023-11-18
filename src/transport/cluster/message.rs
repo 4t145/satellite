@@ -1,15 +1,19 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::transport::{endpoint::EndPointAddr, EpMessage, ConnectionResult, EpData};
+use crate::transport::{endpoint::EpAddr, EpMessage, ConnectionResult, EpData};
 
+/* 
 pub trait ClusterRequest {
-    type Response;
+    type Response: DeserializeOwned;
 }
+ */
+
+ 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClusterMessagePayload {
     ForwardMessage {
-        from: EndPointAddr,
+        from: EpAddr,
         data: EpData,
     },
     ForwardResponse {
@@ -22,11 +26,12 @@ pub enum ClusterMessagePayload {
         node_id: String,
     },
     FindEp {
-        ep: EndPointAddr,
+        ep: EpAddr,
     },
     FindEpResponse {
-        ep: Option<EndPointAddr>,
+        ep: Option<EpAddr>,
     },
+    Close
 }
 
 impl ClusterMessagePayload {
@@ -40,6 +45,11 @@ impl ClusterMessagePayload {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+pub struct Hello {
+    pub id: String
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ClusterMessage {
     id: Uuid,
     payload: Vec<u8>,
@@ -47,7 +57,7 @@ pub struct ClusterMessage {
 
 impl ClusterMessage {
     pub fn id(&self) -> Uuid {
-        self.id.clone()
+        self.id
     }
     pub fn wrap<T: Serialize>(data: T) -> Self {
         Self {
@@ -66,5 +76,9 @@ impl ClusterMessage {
     /// Panics if the payload cannot be deserialized as T
     pub fn unwrap<T: DeserializeOwned>(self) -> (Uuid, T) {
         (self.id, bincode::deserialize(&self.payload).unwrap())
+    }
+
+    pub fn try_unwrap<T: DeserializeOwned>(self) -> Option<(Uuid, T)> {
+        bincode::deserialize(&self.payload).ok().map(|payload| (self.id, payload))
     }
 }
