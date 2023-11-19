@@ -1,15 +1,17 @@
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::transport::{endpoint::EpAddr, EpMessage, ConnectionResult, EpData};
+use crate::transport::{
+    endpoint::{message::EpData, EpAddr},
+    ConnectionResult,
+};
 
-/* 
+/*
 pub trait ClusterRequest {
     type Response: DeserializeOwned;
 }
  */
 
- 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum ClusterMessagePayload {
     ForwardMessage {
@@ -31,7 +33,7 @@ pub enum ClusterMessagePayload {
     FindEpResponse {
         ep: Option<EpAddr>,
     },
-    Close
+    Close,
 }
 
 impl ClusterMessagePayload {
@@ -46,7 +48,7 @@ impl ClusterMessagePayload {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Hello {
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -79,6 +81,8 @@ impl ClusterMessage {
     }
 
     pub fn try_unwrap<T: DeserializeOwned>(self) -> Option<(Uuid, T)> {
-        bincode::deserialize(&self.payload).ok().map(|payload| (self.id, payload))
+        bincode::deserialize(&self.payload)
+            .ok()
+            .map(|payload| (self.id, payload))
     }
 }

@@ -1,19 +1,20 @@
-use std::{collections::HashSet, sync::Weak};
+use std::{collections::HashSet, fmt::Debug};
 
-use tokio::sync::{watch, mpsc};
+use tokio::sync::{mpsc, watch};
 
-use super::{RemoteNode, Node};
+use crate::transport::node::RemoteNode;
+
+use super::Node;
 
 pub mod redis;
 
-
-pub trait ServiceDiscoveryBackend {
+pub trait ServiceDiscoveryBackend: Debug {
     fn spawn(self) -> ServiceDiscovery;
 }
 #[derive(Debug)]
 pub struct ServiceDiscovery {
     node_list: watch::Receiver<HashSet<RemoteNode>>,
-    reporter: mpsc::Sender<RemoteNode>, 
+    reporter: mpsc::Sender<RemoteNode>,
 }
 
 impl ServiceDiscovery {

@@ -1,10 +1,9 @@
 pub mod axum;
-pub mod tungstenite;
 pub mod local;
+pub mod tungstenite;
 
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, sync::Arc, time::Duration, fmt::Debug};
 
-use serde::de::DeserializeOwned;
 use tokio::sync::{mpsc, oneshot, Mutex};
 use uuid::Uuid;
 
@@ -12,9 +11,9 @@ use crate::transport::{ConnectionError, ConnectionResult};
 
 use super::{
     message::{ClusterMessage, ClusterMessagePayload},
-    NodeAddr, RemoteNode,
+    NodeAddr,
 };
-pub trait ClusterConnectionBackend {
+pub trait ClusterConnectionBackend: Debug {
     fn spawn(
         self,
         cluster_message_inbound: mpsc::Sender<(NodeAddr, ClusterMessage)>,
@@ -32,7 +31,10 @@ impl ClusterConnection {
         todo!()
     }
     pub async fn send_message(&self, message: ClusterMessage) -> ConnectionResult {
-        self.cluster_message_outbound_tx.send(message).await.map_err(|_| ConnectionError::Unreachable)
+        self.cluster_message_outbound_tx
+            .send(message)
+            .await
+            .map_err(|_| ConnectionError::Unreachable)
     }
     pub async fn send_message_and_wait_response(
         &self,

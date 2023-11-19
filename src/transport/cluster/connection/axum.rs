@@ -1,83 +1,24 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::SocketAddr,
-    sync::{Arc, Weak},
-};
+use std::sync::Arc;
 
+use axum::extract::ws::{Message, WebSocket};
 use futures::{SinkExt, StreamExt};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 
-use crate::transport::cluster::{
-    get_local_node,
-    message::{ClusterMessage, ClusterMessagePayload, Hello},
-    Node, NodeAddr, RemoteNode,
+use crate::transport::{
+    cluster::{
+        message::{ClusterMessage, ClusterMessagePayload},
+        NodeAddr,
+    },
+    node::RemoteNode,
 };
 
 use super::{ClusterConnection, ClusterConnectionBackend};
-
-use axum::{
-    body::{self, Body, HttpBody},
-    extract::{
-        ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade},
-        ConnectInfo, Path,
-    },
-    http::{Response, StatusCode},
-    response::IntoResponse,
-    routing::get,
-    Router,
-};
-
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    // user_agent: Option<TypedHeader<headers::UserAgent>>,
-    ConnectInfo(addr): ConnectInfo<SocketAddr>,
-    Path(id): Path<String>,
-    Path(peer_id): Path<String>,
-) -> impl IntoResponse {
-    if let Some(node) = get_local_node(&id) {
-        let remote_node = RemoteNode {
-            id: peer_id,
-            socket_addr: addr,
-        };
-        ws.on_upgrade(move |socket| handle_socket(socket, remote_node, node))
-    } else {
-        Response::builder()
-            .status(StatusCode::NOT_FOUND)
-            .body(body::boxed(body::Empty::new()))
-            .unwrap()
-    }
-}
-
-async fn handle_socket(socket: WebSocket, peer: RemoteNode, node: Arc<Node>) {
-    let peer = Arc::new(peer);
-    let backend = AxumConnection {
-        socket,
-        peer: peer.clone(),
-        cluster_outbound_buffer_size: node.config.cluster_outbound_buffer_size,
-    };
-    let addr = NodeAddr::Remote(peer);
-    node.connect_node(addr, backend).await;
-}
-
-pub struct Axum {
-    socket_addr: SocketAddr,
-}
-
-impl Axum {
-    pub async fn serve(self) {
-        let app = Router::new().route("/ws/:id/:peerid", get(ws_handler));
-
-        axum::Server::bind(&self.socket_addr)
-            .serve(app.into_make_service())
-            .await
-            .unwrap();
-    }
-}
 
 // for close code: https://developer.mozilla.org/en-US/docs/Web/API/CloseEvent/code
 const CLOSE_CODE_PRIVATE: u16 = 4000;
 // const CLOSE_CODE_INVALID_BINCODE: u16 = 4001;
 // const CLOSE_CODE_EXPECT_HELLO: u16 = 4002;
+#[derive(Debug)]
 pub(crate) struct AxumConnection {
     pub socket: WebSocket,
     pub peer: Arc<RemoteNode>,
@@ -132,10 +73,8 @@ impl ClusterConnectionBackend for AxumConnection {
                     }
                 }
             });
-            tokio::select! {
-                _ = inbound_task => {}
-                _ = outbound_task => {}
-            }
+            let _ = inbound_task.await;
+            outbound_task.abort();
         };
         tokio::spawn(task);
         ClusterConnection {

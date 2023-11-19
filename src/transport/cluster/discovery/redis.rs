@@ -1,20 +1,16 @@
-use std::{
-    collections::{HashMap, HashSet},
-    net::SocketAddr,
-    time::Duration,
-};
+use std::{collections::HashSet, net::SocketAddr, time::Duration};
 
-use crate::transport::cluster::RemoteNode;
-use redis::AsyncCommands;
 use tokio::sync::{mpsc, watch};
 use url::Url;
 
-use super::{ServiceDiscovery, ServiceDiscoveryBackend};
+use crate::transport::node::RemoteNode;
 
+use super::{ServiceDiscovery, ServiceDiscoveryBackend};
+#[derive(Debug, Clone)]
 pub struct RedisDiscoveryBackend {
-    redis_url: Url,
-    path: String,
-    poll_rate: Duration,
+    pub redis_url: Url,
+    pub path: String,
+    pub poll_rate: Duration,
 }
 
 impl ServiceDiscoveryBackend for RedisDiscoveryBackend {
@@ -90,7 +86,8 @@ impl ServiceDiscoveryBackend for RedisDiscoveryBackend {
                         .arg(val)
                         .arg("EX")
                         .arg(30)
-                        .query_async::<_, ()>(&mut conn).await;
+                        .query_async::<_, ()>(&mut conn)
+                        .await;
                 }
             }
         });
