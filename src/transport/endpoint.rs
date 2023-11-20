@@ -14,17 +14,30 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 
 use std::fmt::Debug;
-
-pub trait EndPoint {}
-
-pub struct BoxedEndpoint(pub Box<dyn EndPoint>);
-
-impl EndPoint for BoxedEndpoint {}
-
-#[derive(Debug, Hash, PartialEq, Eq, Clone, Serialize, Deserialize)]
+use std::sync::Arc;
+#[derive(Debug, Hash, PartialEq, Eq, Clone)]
 pub struct EpAddr {
     pub protocol: Cow<'static, str>,
-    pub address: String,
+    pub address: Arc<str>,
+}
+
+impl Serialize for EpAddr {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&format!("{}://{}", self.protocol, self.address))
+    }
+}
+
+impl<'a> Deserialize<'a> for EpAddr {
+    fn deserialize<D: serde::Deserializer<'a>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        let Some((p, str)) = s.split_once("://")  else {
+
+        };
+        Ok(Self {
+            protocol: Cow::Owned(protocol.to_owned()),
+            address: Arc::from(address),
+        })
+    }
 }
 
 impl EpAddr {
@@ -37,7 +50,7 @@ impl EpAddr {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct EpConnection {
     pub remote_addr: EpAddr,
     pub data_tx: mpsc::Sender<EpData>,
@@ -68,14 +81,6 @@ impl EpConnection {
     pub fn response(&self, message_id: String, result: ConnectionResult) {
         let _ = self.response_tx.try_send((message_id, result));
     }
-
-    // pub fn poll_next_message(&self, cx: &mut Context<'_>) -> Poll<Option<EpMessage>> {
-    //     if let Ok(mut lock) = self.ep_message_rx.lock() {
-    //         lock.poll_recv(cx)
-    //     } else {
-    //         Poll::Pending
-    //     }
-    // }
 }
 
 pub trait EpConnectionBackend: Debug {
@@ -90,7 +95,11 @@ impl Node {
         self.ep_connections
             .write()
             .await
-            .insert(addr, backend.spawn(ep_message_tx));
+            .insert(addr.clone(), backend.spawn(ep_message_tx));
+        let message = ClusterMessagePayload::EpLogin { ep: addr.clone() }.wrap();
+        for (_, conn) in self.cluster_connections.read().await.iter() {
+            conn.send_message_anyway(message.clone());
+        }
         tracing::trace!("connected endpoint");
     }
 
@@ -99,8 +108,9 @@ impl Node {
         tracing::trace!("disconnect endpoint");
         self.ep_connections.write().await.remove(addr);
         self.router.write().await.remove(addr);
-        for (_, _conn) in self.cluster_connections.read().await.iter() {
-            // broadcast logout
+        let message = ClusterMessagePayload::EpLogout { ep: addr.clone() }.wrap();
+        for (_, conn) in self.cluster_connections.read().await.iter() {
+            conn.send_message_anyway(message.clone());
         }
     }
 
@@ -200,6 +210,15 @@ impl Node {
         let _ = self.hb_tx.send(from);
     }
     pub async fn send_ep_message(&self, from: EpAddr, data: EpData) -> ConnectionResult {
+        let to = data.peer.clone();
+        // protocol handler
+        let protoco = to.protocol;
+        if let Some(protocol) = self.protocol_handlers.get(&protoco.as_ref()) {
+            protocol.handle_message(to.address, self.arc()).await?;
+        } else {
+            // no protocol handler
+            return ConnectionResult::Err(ConnectionError::ProtocolNotSupported);
+        }
         if let Some(c) = self.ep_connections.read().await.get(&data.peer) {
             c.send(data.id, from, data.payload)
         } else if let Some(node) = self.find_ep(&data.peer).await {

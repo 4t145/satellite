@@ -5,7 +5,7 @@ use std::{
 
 use satellite::transport::{
     cluster::{discovery::redis::RedisDiscoveryBackend, connection::local::connect_locals},
-    node::{Node, NodeConfig},
+    node::{Node, NodeConfig, NodeBuilder},
 };
 use tracing::level_filters::LevelFilter;
 
@@ -22,22 +22,8 @@ pub async fn main() {
         poll_rate: Duration::from_secs(5),
     };
     let host = SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, 80));
-    let node1 = Node::new(
-        NodeConfig {
-            host,
-            ..Default::default()
-        },
-        sd.clone(),
-    )
-    .await;
-    let node2 = Node::new(
-        NodeConfig {
-            host,
-            ..Default::default()
-        },
-        sd,
-    )
-    .await;
+    let node1 = NodeBuilder::default().service_discovery(sd.clone()).build().await;
+    let node2 = NodeBuilder::default().service_discovery(sd).build().await;
     connect_locals(node1, node2).await;
     satellite::server::axum::Axum { socket_addr: host }
         .serve()

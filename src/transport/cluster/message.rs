@@ -33,6 +33,12 @@ pub enum ClusterMessagePayload {
     FindEpResponse {
         ep: Option<EpAddr>,
     },
+    EpLogin {
+        ep: EpAddr,
+    },
+    EpLogout {
+        ep: EpAddr,
+    },
     Close,
 }
 
@@ -51,7 +57,7 @@ pub struct Hello {
     pub id: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ClusterMessage {
     id: Uuid,
     payload: Vec<u8>,

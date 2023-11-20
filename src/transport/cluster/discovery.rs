@@ -7,6 +7,7 @@ use crate::transport::node::RemoteNode;
 use super::Node;
 
 pub mod redis;
+pub mod standalone;
 
 pub trait ServiceDiscoveryBackend: Debug {
     fn spawn(self) -> ServiceDiscovery;

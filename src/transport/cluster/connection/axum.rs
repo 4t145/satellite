@@ -51,7 +51,7 @@ impl ClusterConnectionBackend for AxumConnection {
                         Ok(Message::Close(cf)) => {
                             if let Some(cf) = cf {
                                 if cf.code >= CLOSE_CODE_PRIVATE {
-                                    // warn protocal error
+                                    // warn protocol error
                                 }
                             }
                             let _ = cluster_message_inbound

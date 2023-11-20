@@ -56,7 +56,7 @@ impl ClusterConnectionBackend for TungsteniteClientConnection {
                         Ok(Message::Close(cf)) => {
                             if let Some(cf) = cf {
                                 if matches!(cf.code, CloseCode::Library(_)) {
-                                    // warn protocal error
+                                    // warn protocol error
                                 }
                             }
                             let _ = cluster_message_inbound

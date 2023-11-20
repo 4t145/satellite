@@ -61,6 +61,12 @@ impl Node {
                 )
                 .await;
             }
+            ClusterMessagePayload::EpLogin { ep } => {
+                self.router.write().await.insert(ep, source.clone());
+            }
+            ClusterMessagePayload::EpLogout { ep } => {
+                self.router.write().await.remove(&ep);
+            }
             _ => {
                 // no need to handle
             }

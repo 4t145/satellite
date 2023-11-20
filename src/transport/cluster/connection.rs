@@ -2,7 +2,7 @@ pub mod axum;
 pub mod local;
 pub mod tungstenite;
 
-use std::{collections::HashMap, sync::Arc, time::Duration, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug, sync::Arc, time::Duration};
 
 use tokio::sync::{mpsc, oneshot, Mutex};
 use uuid::Uuid;
@@ -35,6 +35,10 @@ impl ClusterConnection {
             .send(message)
             .await
             .map_err(|_| ConnectionError::Unreachable)
+    }
+    pub fn send_message_anyway(&self, message: ClusterMessage) {
+        let tx = self.cluster_message_outbound_tx.clone();
+        tokio::spawn(async move { tx.send(message).await });
     }
     pub async fn send_message_and_wait_response(
         &self,

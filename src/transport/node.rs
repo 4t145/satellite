@@ -9,14 +9,19 @@ use futures::StreamExt;
 use tokio::sync::{mpsc, RwLock};
 
 use tokio_util::time::DelayQueue;
-use tracing::{instrument, info};
+use tracing::{info, instrument};
 
-use super::cluster::{
-    connection::{
-        local::connect_locals, tungstenite::TungsteniteClientConnection, ClusterConnection,
+use super::{
+    cluster::{
+        connection::{
+            local::connect_locals, tungstenite::TungsteniteClientConnection, ClusterConnection,
+        },
+        discovery::{
+            standalone::StandaloneDiscoveryBackend, ServiceDiscovery, ServiceDiscoveryBackend,
+        },
+        message::ClusterMessage,
     },
-    discovery::{ServiceDiscovery, ServiceDiscoveryBackend},
-    message::ClusterMessage,
+    protocol::ProtocolHandler,
 };
 
 use super::{
@@ -110,7 +115,6 @@ pub(crate) fn get_local_node(id: &str) -> Option<Arc<Node>> {
         .get(id)
         .and_then(|weak| weak.upgrade())
 }
-#[derive(Debug)]
 pub struct Node {
     pub config: NodeConfig,
     pub(super) router: RwLock<HashMap<EpAddr, NodeAddr>>,
@@ -121,6 +125,13 @@ pub struct Node {
     pub(super) cluster_message_tx: mpsc::Sender<(NodeAddr, ClusterMessage)>,
     pub(super) cluster_connections: RwLock<HashMap<NodeAddr, ClusterConnection>>,
     pub(super) self_weak_ref: Weak<Node>,
+    pub(super) protocol_handlers: HashMap<&'static str, Box<dyn ProtocolHandler>>,
+}
+
+impl std::fmt::Debug for Node {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Node").field("id", &self.config.id).finish()
+    }
 }
 
 impl Drop for Node {
@@ -142,6 +153,53 @@ impl PartialEq for Node {
 }
 impl Eq for Node {}
 
+
+#[derive(Debug)]
+pub struct NodeBuilder<S: ServiceDiscoveryBackend> {
+    config: NodeConfig,
+    service_discovery: S,
+    protocol_handlers: HashMap<&'static str, Box<dyn ProtocolHandler>>,
+}
+
+impl Default for NodeBuilder<StandaloneDiscoveryBackend> {
+    fn default() -> Self {
+        Self {
+            config: Default::default(),
+            service_discovery: StandaloneDiscoveryBackend,
+            protocol_handlers: Default::default(),
+        }
+    }
+}
+
+impl<S: ServiceDiscoveryBackend> NodeBuilder<S> {
+    pub fn config(mut self, config: NodeConfig) -> Self {
+        self.config = config;
+        self
+    }
+    pub fn service_discovery<S2: ServiceDiscoveryBackend>(
+        self,
+        service_discovery: S2,
+    ) -> NodeBuilder<S2> {
+        NodeBuilder::<S2> {
+            config: self.config,
+            service_discovery,
+            protocol_handlers: self.protocol_handlers,
+        }
+    }
+    pub fn protocol_handler(
+        mut self,
+        protocol: &'static str,
+        handler: impl ProtocolHandler, 
+    ) -> Self {
+        self.protocol_handlers.insert(protocol, Box::new(handler));
+        self
+    }
+
+    pub async fn build(self) -> Arc<Node> {
+        Node::new::<S>(self).await
+    }
+}
+
 impl Node {
     pub fn id(&self) -> String {
         self.config.id.clone()
@@ -152,10 +210,14 @@ impl Node {
             .expect("self reference not pointed to self")
     }
     #[instrument]
-    pub async fn new(
-        config: NodeConfig,
-        service_discovery: impl ServiceDiscoveryBackend,
+    pub async fn new<S: ServiceDiscoveryBackend>(
+        builder: NodeBuilder<S>,
     ) -> Arc<Self> {
+        let NodeBuilder {
+            config,
+            service_discovery,
+            protocol_handlers
+        } = builder;
         info!("creating new node with config: {config:?}");
         let (ep_message_tx, mut ep_message_rx) = mpsc::channel(config.ep_buffer_size);
         let (cluster_message_tx, mut cluster_message_rx) =
@@ -172,6 +234,7 @@ impl Node {
             config,
             service_discovery,
             cluster_connections: Default::default(),
+            protocol_handlers,
         });
         add_local_node(node.clone());
         // handle ep messages
